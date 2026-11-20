@@ -9,7 +9,7 @@ phát lại lời giải.
 
 - `Engine` hỗ trợ core mechanics, fragile tiles, bridges, soft/heavy/split
   switches, split/merge, đổi khối điều khiển và kiểm tra thắng/thua.
-- GUI web dùng Three.js trong một file `gui/index.html`, được `server.py`
+- GUI web dùng Three.js trong một file `gui/index.html`, được `main.py`
   phục vụ cùng HTTP API và texture/model trong `assets/`.
 - Có 20 màn chơi GUI: `levels/level1.json` đến `levels/level20.json`.
 - BFS, DFS, UCS và A* dùng chung `Engine` và trả về `SearchResult` có metrics.
@@ -23,7 +23,7 @@ phát lại lời giải.
   toàn bộ state đạt được của 120 case (0 vi phạm). H2 trả ∞ cho ngõ cụt, và A*
   bỏ các state đó khỏi frontier. Xem `docs/deep-research-report.md`.
 - Chưa có automated test suite. CI (`.github/workflows/ci.yml`) chỉ chạy smoke
-  check: compile và import `game`, `solvers`, `server`.
+  check: compile và import `game`, `solvers`, `main`.
 
 ## Cài đặt và chạy GUI
 
@@ -34,19 +34,17 @@ repository:
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python server.py
+python main.py
 ```
 
 Mở trình duyệt tại `http://127.0.0.1:8000`. Tài liệu API tự sinh của FastAPI có
 ở `http://127.0.0.1:8000/docs`.
 
-`requirements.txt` chỉ chứa dependency của server (`fastapi`, `uvicorn`). Core
-game, solver và benchmark chỉ dùng thư viện chuẩn Python. Notebook
-`experiments/analysis.ipynb` cần thêm các gói phân tích:
-
-```powershell
-python -m pip install numpy pandas matplotlib jupyter ipykernel
-```
+`requirements.txt` gồm dependency của server (`fastapi`, `uvicorn`, đã ghim
+phiên bản) và các gói cho notebook `experiments/analysis.ipynb` (`numpy`,
+`pandas`, `matplotlib`, `jupyter`, `ipykernel`, chưa ghim phiên bản). Core game,
+solver và các script benchmark chỉ dùng thư viện chuẩn Python, nên chạy được kể
+cả khi chưa cài các gói phân tích. GUI tải Three.js từ CDN nên cần có internet.
 
 ### Điều khiển trong GUI
 
@@ -56,7 +54,7 @@ python -m pip install numpy pandas matplotlib jupyter ipykernel
 | `Space` / **ĐỔI KHỐI** | Đổi cube điều khiển khi đang split |
 | `U`, `Backspace` / **UNDO** | Hoàn tác một bước |
 | `R` / **RESTART** | Chơi lại level hiện tại |
-| **SOLVE** | Gọi solver đã chọn (BFS/DFS/UCS/A*) rồi phát lại lời giải. Metrics được ghi vào `#solver-metrics` nhưng đang bị CSS ẩn; số liệu lấy từ `experiments/` |
+| **SOLVE** | Gọi solver đã chọn (BFS/DFS/UCS/A*) rồi phát lại lời giải; thanh trạng thái báo số bước. Số liệu hiệu năng không hiện trên GUI mà xem ở `experiments/` |
 | ⏮ ◀ ▶ ▶ ⏭, thanh **TỐC ĐỘ** | Phát lại lời giải từng bước hoặc tự động |
 
 ## Cấu trúc chính
@@ -75,7 +73,7 @@ solvers/                      # BFS, DFS, UCS, A* và SearchResult
 levels/                       # level1.json ... level20.json của GUI
 gui/index.html                # GUI Three.js (single file)
 assets/rollingcat/            # texture/model, phục vụ tại /assets/* (MIT)
-server.py                     # FastAPI app: API + GUI + assets
+main.py                      # FastAPI app: API + GUI + assets
 experiments/                  # benchmark trên bộ test cố định
   test_set.json               #   120 case: 100 bản đồ độc lập + 20 level GUI
   build_test_set.py           #   nhúng lại 20 level GUI vào test_set.json
@@ -86,12 +84,12 @@ experiments/                  # benchmark trên bộ test cố định
   results_metadata.json       #   cấu hình và môi trường của lần chạy đó
   heuristic_check.csv         #   kết quả kiểm chứng heuristic
   analysis.ipynb              #   notebook phân tích kết quả
-docs/                         # API, GUI contract, status, báo cáo heuristic
+docs/                         # quy tắc làm việc, phân công, changelog, báo cáo heuristic
 .github/workflows/ci.yml      # smoke check trên branch gui_v2
-requirements.txt              # dependency runtime của server
+requirements.txt              # dependency của server và notebook phân tích
 ```
 
-Entrypoint duy nhất của ứng dụng là `python server.py`.
+Entrypoint duy nhất của ứng dụng là `python main.py`.
 
 ## Level JSON
 
@@ -122,7 +120,7 @@ Mỗi level là một object có `name`, `grid`, `bridges` và `switches`:
 
 Metadata trong `bridges`/`switches` phải khớp với ký tự trong grid.
 `load_board()` và `parse_board()` validate level trước khi server, GUI hay solver
-dùng tới. Schema đầy đủ và ví dụ: `docs/api.md` §6.3.
+dùng tới. Các quy tắc validate nằm trong `game/board.py`.
 
 ## Solver
 
@@ -167,7 +165,7 @@ gọi `clear_h2_cache()` trước mỗi lượt để luôn đo chi phí dựng 
 | `POST` | `/solve` | Chạy `BFS`/`DFS`/`UCS`/`ASTAR`, giới hạn 10 giây |
 
 Server không giữ trạng thái: mỗi request mang đủ level và state. Lỗi trả về dạng
-`{"error": {"code", "message"}}`. Chi tiết contract: `docs/gui_api.md`.
+`{"error": {"code", "message"}}`. Cài đặt các endpoint nằm trong `main.py`; tài liệu API tự sinh có ở `/docs`.
 
 ## Benchmark và kiểm chứng heuristic
 
@@ -202,11 +200,8 @@ bảng chi tiết nằm trong [`experiments/README.md`](experiments/README.md).
 ## Tài liệu liên quan
 
 - [`experiments/README.md`](experiments/README.md): benchmark, bộ test và kết quả.
-- [`docs/index.md`](docs/index.md): bản đồ toàn bộ tài liệu.
-- [`docs/api.md`](docs/api.md): contract Python của Engine/solver.
-- [`docs/gui_api.md`](docs/gui_api.md): contract GUI/HTTP và luồng tích hợp.
 - [`docs/deep-research-report.md`](docs/deep-research-report.md): thiết kế H2, chứng minh và kiểm chứng.
-- [`docs/status.md`](docs/status.md): trạng thái hiện tại và blocker.
+- [`docs/Mô tả công việc.md`](docs/M%C3%B4%20t%E1%BA%A3%20c%C3%B4ng%20vi%E1%BB%87c.md): phân công và ranh giới module.
 - [`docs/CHANGELOG.md`](docs/CHANGELOG.md): lịch sử thay đổi.
 - [`docs/Agents.md`](docs/Agents.md): quy tắc làm việc trong repo.
 - [`AI - Project 1 (đã fix).pdf`](AI%20-%20Project%201%20%28đã%20fix%29.pdf): yêu cầu môn học.
@@ -216,8 +211,8 @@ bảng chi tiết nằm trong [`experiments/README.md`](experiments/README.md).
 Giống smoke check của CI:
 
 ```powershell
-python -m compileall -q game solvers experiments server.py
-python -c "import game, solvers, server; print('Core imports OK')"
+python -m compileall -q game solvers experiments main.py
+python -c "import game, solvers, main; print('Core imports OK')"
 python -m experiments.run_experiments --help
 ```
 
